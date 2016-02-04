@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ResourceBundle;
 
 
 /**
@@ -21,7 +22,7 @@ public class BrowserModel {
     private int myCurrentIndex;
     private List<URL> myHistory;
     private Map<String, URL> myFavorites;
-
+    private ResourceBundle myResources;
 
     /**
      * Creates an empty model.
@@ -32,6 +33,8 @@ public class BrowserModel {
         myCurrentIndex = -1;
         myHistory = new ArrayList<>();
         myFavorites = new HashMap<>();
+        myResources =
+                ResourceBundle.getBundle(BrowserView.DEFAULT_RESOURCE_PACKAGE + "error");
     }
 
     /**
@@ -59,7 +62,7 @@ public class BrowserModel {
     /**
      * Changes current page to given URL, removing next history.
      */
-    public URL go (String url) {
+    public URL go (String url) throws BrowserException {
         try {
             URL tmp = completeURL(url);
             // unfortunately, completeURL may not have returned a valid URL, so test it
@@ -76,7 +79,7 @@ public class BrowserModel {
             return myCurrentURL;
         }
         catch (Exception e) {
-            return null;
+            throw new BrowserException(String.format(myResources.getString("URLError"), url));
         }
     }
 
@@ -132,21 +135,25 @@ public class BrowserModel {
     }
 
     // deal with a potentially incomplete URL
-    private URL completeURL (String possible) {
+    private URL completeURL (String possible) throws BrowserException {
         try {
             // try it as is
             return new URL(possible);
-        } catch (MalformedURLException e) {
+        }
+        catch (MalformedURLException e) {
             try {
                 // try it as a relative link
                 // BUGBUG: need to generalize this :(
                 return new URL(myCurrentURL.toString() + "/" + possible);
-            } catch (MalformedURLException ee) {
+            }
+            catch (MalformedURLException ee) {
                 try {
                     // e.g., let user leave off initial protocol
                     return new URL(PROTOCOL_PREFIX + possible);
-                } catch (MalformedURLException eee) {
-                    return null;
+                }
+                catch (MalformedURLException eee) {
+                    throw new BrowserException(String.format(myResources.getString("MalformedURL"),
+                                                             possible));
                 }
             }
         }

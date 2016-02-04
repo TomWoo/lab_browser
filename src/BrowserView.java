@@ -2,6 +2,12 @@ import java.awt.Dimension;
 import java.net.URL;
 import java.util.Optional;
 import java.util.ResourceBundle;
+import javax.imageio.ImageIO;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.w3c.dom.events.EventListener;
+import org.w3c.dom.events.EventTarget;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.concurrent.Worker;
@@ -23,19 +29,13 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
-import javax.imageio.ImageIO;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.NodeList;
-import org.w3c.dom.events.EventListener;
-import org.w3c.dom.events.EventTarget;
 
 
 /**
  * A class used to display the viewer for a simple HTML browser.
  * 
  * See this tutorial for help on how to use the variety of components:
- *   http://download.oracle.com/otndocs/products/javafx/2/samples/Ensemble/
+ * http://download.oracle.com/otndocs/products/javafx/2/samples/Ensemble/
  * 
  * @author Owen Astrachan
  * @author Marcin Dobosz
@@ -61,6 +61,8 @@ public class BrowserView {
     private Button myBackButton;
     private Button myNextButton;
     private Button myHomeButton;
+
+    private Button favoritesButton;
     // favorites
     private ComboBox<String> myFavorites;
     // get strings from resource file
@@ -84,19 +86,21 @@ public class BrowserView {
         enableButtons();
         // create scene to hold UI
         myScene = new Scene(root, DEFAULT_SIZE.width, DEFAULT_SIZE.height);
-        //myScene.getStylesheets().add(DEFAULT_RESOURCE_PACKAGE + STYLESHEET);
+        // myScene.getStylesheets().add(DEFAULT_RESOURCE_PACKAGE + STYLESHEET);
     }
 
     /**
      * Display given URL.
      */
     public void showPage (String url) {
-        URL valid = myModel.go(url);
-        if (valid != null) {
-            update(valid);
+        try {
+            URL valid = myModel.go(url);
+            if (valid != null) {
+                update(valid);
+            }
         }
-        else {
-            showError("Could not load " + url);
+        catch (BrowserException e) {
+            showError(e.getMessage());
         }
     }
 
@@ -143,7 +147,7 @@ public class BrowserView {
     private void showFavorite (String favorite) {
         showPage(myModel.getFavorite(favorite).toString());
         // reset favorites ComboBox so the same choice can be made again
-        myFavorites.setValue(null);
+        // myFavorites.setValue(null);
     }
 
     // update just the view to display given URL
@@ -152,6 +156,11 @@ public class BrowserView {
         myPage.getEngine().load(urlText);
         myURLDisplay.setText(urlText);
         enableButtons();
+
+        myFavorites.setOnAction( (event) -> {
+            String selectedFavorite = myFavorites.getSelectionModel().getSelectedItem();
+            showFavorite(selectedFavorite);
+        });
     }
 
     // prompt user for name of favorite to add to collection
@@ -169,9 +178,10 @@ public class BrowserView {
 
     // only enable buttons when useful to user
     private void enableButtons () {
-        myBackButton.setDisable(! myModel.hasPrevious());
-        myNextButton.setDisable(! myModel.hasNext());
+        myBackButton.setDisable(!myModel.hasPrevious());
+        myNextButton.setDisable(!myModel.hasNext());
         myHomeButton.setDisable(myModel.getHome() == null);
+
     }
 
     // convenience method to create HTML page display
@@ -202,10 +212,10 @@ public class BrowserView {
         // create buttons, with their associated actions
         // old style way to do set up callback (anonymous class)
         myBackButton = makeButton("BackCommand", new EventHandler<ActionEvent>() {
-            @Override      
-            public void handle (ActionEvent event) {       
-                back();        
-            }      
+            @Override
+            public void handle (ActionEvent event) {
+                back();
+            }
         });
         result.getChildren().add(myBackButton);
         // new style way to do set up callback (lambdas)
@@ -226,25 +236,30 @@ public class BrowserView {
         HBox result = new HBox();
         myFavorites = new ComboBox<String>();
         // ADD REST OF CODE HERE
+        result.getChildren().add(makeButton("AddFavoriteCommand", event -> addFavorite()));
         result.getChildren().add(makeButton("SetHomeCommand", event -> {
             myModel.setHome();
             enableButtons();
         }));
+        result.getChildren().add(myFavorites);
         return result;
     }
 
     // makes a button using either an image or a label
     private Button makeButton (String property, EventHandler<ActionEvent> handler) {
         // represent all supported image suffixes
-        final String IMAGEFILE_SUFFIXES = 
-            String.format(".*\\.(%s)", String.join("|", ImageIO.getReaderFileSuffixes()));
+        final String IMAGEFILE_SUFFIXES =
+                String.format(".*\\.(%s)", String.join("|", ImageIO.getReaderFileSuffixes()));
 
         Button result = new Button();
         String label = myResources.getString(property);
         if (label.matches(IMAGEFILE_SUFFIXES)) {
             result.setGraphic(new ImageView(
-                new Image(getClass().getResourceAsStream(DEFAULT_RESOURCE_PACKAGE + label))));
-        } else {
+                                            new Image(getClass().getResourceAsStream(
+                                                                                     DEFAULT_RESOURCE_PACKAGE +
+                                                                                     label))));
+        }
+        else {
             result.setText(label);
         }
         result.setOnAction(handler);
@@ -262,15 +277,14 @@ public class BrowserView {
     // display page
     // very old style way create a callback (inner class)
     private class ShowPage implements EventHandler<ActionEvent> {
-        @Override      
-        public void handle (ActionEvent event) {       
-            showPage(myURLDisplay.getText());      
-        }      
+        @Override
+        public void handle (ActionEvent event) {
+            showPage(myURLDisplay.getText());
+        }
     }
 
-
     // Inner class to deal with link-clicks and mouse-overs Mostly taken from
-    //   http://blogs.kiyut.com/tonny/2013/07/30/javafx-webview-addhyperlinklistener/
+    // http://blogs.kiyut.com/tonny/2013/07/30/javafx-webview-addhyperlinklistener/
     private class LinkListener implements ChangeListener<State> {
         public static final String EVENT_CLICK = "click";
         public static final String EVENT_MOUSEOVER = "mouseover";
@@ -280,14 +294,16 @@ public class BrowserView {
         public void changed (ObservableValue<? extends State> ov, State oldState, State newState) {
             if (newState == Worker.State.SUCCEEDED) {
                 EventListener listener = event -> {
-                    final String href = ((Element)event.getTarget()).getAttribute("href");
+                    final String href = ((Element) event.getTarget()).getAttribute("href");
                     if (href != null) {
                         String domEventType = event.getType();
                         if (domEventType.equals(EVENT_CLICK)) {
                             showPage(href);
-                        } else if (domEventType.equals(EVENT_MOUSEOVER)) {
+                        }
+                        else if (domEventType.equals(EVENT_MOUSEOVER)) {
                             showStatus(href);
-                        } else if (domEventType.equals(EVENT_MOUSEOUT)) {
+                        }
+                        else if (domEventType.equals(EVENT_MOUSEOUT)) {
                             showStatus(BLANK);
                         }
                     }
@@ -295,7 +311,7 @@ public class BrowserView {
                 Document doc = myPage.getEngine().getDocument();
                 NodeList nodes = doc.getElementsByTagName("a");
                 for (int i = 0; i < nodes.getLength(); i++) {
-                    EventTarget node = (EventTarget)nodes.item(i);
+                    EventTarget node = (EventTarget) nodes.item(i);
                     node.addEventListener(EVENT_CLICK, listener, false);
                     node.addEventListener(EVENT_MOUSEOVER, listener, false);
                     node.addEventListener(EVENT_MOUSEOUT, listener, false);
